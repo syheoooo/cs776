@@ -1,0 +1,136 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{caption}
+\setlist[itemize]{noitemsep, topsep=2pt}
+
+% Header
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{University of Wisconsin-Madison \\ BMI/CS 776: Advanced Bioinformatics}
+\rhead{Spring 2026 \\ Project Progress \\ Due: Mon, Apr 6, 2026 11:59 PM}
+\renewcommand{\headrulewidth}{0.4pt}
+\setlength{\headheight}{28pt}
+
+\begin{document}
+
+\begin{center}
+  {\large\textbf{Project Progress Report}}
+\end{center}
+
+\vspace{-4pt}
+
+%% ── PROJECT TITLE ────────────────────────────────────────────────────────────
+\noindent\textbf{Project Title:} Milk Fatty Acid Profile as an Early Biomarker of Subclinical Mastitis
+
+%% ── TEAM INFO ────────────────────────────────────────────────────────────────
+\medskip
+\noindent\textbf{Team Information:}
+\begin{itemize}
+  \item Seonyeong Heo — \href{mailto:seonyeong.heo@wisc.edu}{seonyeong.heo@wisc.edu}
+  \item Waleed Arshad — \href{mailto:warshad@wisc.edu}{warshad@wisc.edu}
+  \item Ignacio Azola Ortiz — \href{mailto:azolaortiz@wisc.edu}{azolaortiz@wisc.edu}
+\end{itemize}
+
+%% ── PROPOSAL UPDATES ─────────────────────────────────────────────────────────
+\medskip
+\noindent\textbf{Proposal Updates:}
+No major modifications to the original proposal. However, upon examining the dataset we noted that the \texttt{high\_scc} binary label was not correctly pre-computed in the source file (all values were zero). We recomputed it using the standard veterinary threshold of SCC $> 200$ ($\times 10^3$ cells/mL), yielding a 23\% prevalence of elevated SCC observations, which aligns with published subclinical mastitis rates in dairy herds. Additionally, several fatty acid columns (e.g., \texttt{newly\_fa}, \texttt{c18\_0}) have high rates of missingness ($>$30\%), so our modeling subsets use the core SFA/UFA features as the primary FA predictors.
+
+%% ── PROGRESS ─────────────────────────────────────────────────────────────────
+\medskip
+\noindent\textbf{Progress:}
+\begin{itemize}
+  \item \textbf{Data acquisition and preprocessing:} Obtained the dataset from the LEO (Livestock Environment Opendata) portal. The dataset contains 387,713 observations across 36 features per individual cow, including milk composition, fatty acid (FA) profiles, milk quality indicators, and metabolic markers. We cleaned the data by removing biologically invalid SCC entries ($\leq 0$), recomputed \texttt{scc\_log} ($= \log_{10}(\text{SCC})$), and re-derived the \texttt{high\_scc} binary label.
+
+  \item \textbf{Exploratory Data Analysis (EDA):} Generated distribution plots for SCC and \texttt{scc\_log}, a missing-data audit per feature, Pearson correlation of all FA/milk-composition features against \texttt{scc\_log}, SCC stratified by lactation stage (early/mid/late), and a scatter plot of SFA vs.\ UFA colored by \texttt{scc\_log}.
+
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/scc_distribution.png}
+    \caption{SCC distribution (raw, clipped at 3000; left) and log$_{10}$-transformed SCC with the 200\,$\times10^3$ cells/mL threshold used to derive the \texttt{high\_scc} label (right).}
+    \label{fig:scc_dist}
+  \end{figure}
+
+  \begin{figure}[H]
+    \centering
+    \begin{subfigure}[t]{0.48\linewidth}
+      \includegraphics[width=\linewidth]{figures/missing_data.png}
+      \caption{Missing-data audit by feature. Three FA columns exceed the 50\% threshold (dashed red line).}
+      \label{fig:missing}
+    \end{subfigure}\hfill
+    \begin{subfigure}[t]{0.48\linewidth}
+      \includegraphics[width=\linewidth]{figures/feature_correlations.png}
+      \caption{Pearson correlation of each feature with log$_{10}$(SCC). Lactose is the strongest negative predictor; protein and casein are the strongest positive predictors.}
+      \label{fig:corr}
+    \end{subfigure}
+    \caption{EDA: data quality and univariate associations with SCC.}
+  \end{figure}
+
+  \begin{figure}[H]
+    \centering
+    \begin{subfigure}[t]{0.48\linewidth}
+      \includegraphics[width=\linewidth]{figures/scc_by_stage.png}
+      \caption{log$_{10}$(SCC) stratified by lactation stage. SCC rises monotonically from early to late lactation.}
+      \label{fig:stage}
+    \end{subfigure}\hfill
+    \begin{subfigure}[t]{0.48\linewidth}
+      \includegraphics[width=\linewidth]{figures/sfa_ufa_scatter.png}
+      \caption{SFA vs.\ UFA scatter colored by log$_{10}$(SCC). Most observations cluster near the origin with a negative SFA/UFA trade-off axis.}
+      \label{fig:sfaufa}
+    \end{subfigure}
+    \caption{EDA: temporal SCC trend and fatty acid profile structure.}
+  \end{figure}
+
+  \item \textbf{Phase 1 — Linear Mixed-Effects Model (LMM):} Implemented and fit the LMM proposed in the methodology ($\text{scc\_log} \sim \text{SFA} + \text{UFA} + \text{parity} + \text{DIM}$, random intercept per cow). Using 315,514 observations across 19,172 unique cows, the model converged successfully. Key findings: DIM is the strongest predictor ($\hat{\beta} = 0.138$, $p < 0.001$); parity increases monotonically with SCC ($+0.121$ to $+0.549$ log units for parities 2--9, all $p < 0.001$); UFA shows a small but significant positive association ($\hat{\beta} = 0.009$, $p < 0.001$); SFA is not significant ($p = 0.48$).
+
+  \item \textbf{Phase 2 — Machine Learning (baseline):} Implemented 5-fold cross-validated Linear Regression and Random Forest for SCC regression, and Random Forest classification for high SCC prediction. Results:
+    \begin{center}
+      \small
+      \begin{tabular}{llcc}
+        \toprule
+        Model & Task & RMSE / AUROC & R$^2$ / F1 \\
+        \midrule
+        Linear Regression & Regression  & 0.490 $\pm$ 0.004 & 0.228 $\pm$ 0.003 \\
+        Random Forest     & Regression  & 0.492 $\pm$ 0.004 & 0.220 $\pm$ 0.007 \\
+        Random Forest     & Classification & 0.712 $\pm$ 0.002 (AUC) & 0.279 $\pm$ 0.005 (F1) \\
+        \bottomrule
+      \end{tabular}
+    \end{center}
+
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/feature_importance.png}
+    \caption{Random Forest feature importances (MDI) for SCC regression. Lactose dominates, followed by DIM and the fatty acid features (UFA, UFA/SFA ratio, SFA), underscoring the relevance of FA profile as a predictor.}
+    \label{fig:importance}
+  \end{figure}
+
+  \item \textbf{Phase 3 — Dimensionality Reduction (PCA):} Applied PCA to the five core FA features (SFA, UFA, newly synthesized, mixed, preformed) on 146,324 complete observations. PC1 captures 73.1\% and PC2 captures 23.7\% of FA profile variance, indicating that most variation lies along a single SFA/UFA trade-off axis.
+
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\linewidth]{figures/pca_fa_profile.png}
+    \caption{PCA of the five-feature FA profile colored by log$_{10}$(SCC). PC1 (73.1\% variance) captures the dominant SFA/UFA trade-off axis; no strong SCC gradient is visible, suggesting FA profile alone has limited linear discriminative power for SCC.}
+    \label{fig:pca}
+  \end{figure}
+\end{itemize}
+
+%% ── CHALLENGES ───────────────────────────────────────────────────────────────
+\medskip
+\noindent\textbf{Challenges:}
+\begin{itemize}
+  \item \textbf{Extensive missing FA data:} Several fatty acid columns (\texttt{newly\_fa}, \texttt{mixed\_fa}, \texttt{preformed\_fa}, \texttt{c18\_0/c18\_1}) are missing in 30--62\% of records, reducing the usable sample for full-profile analyses. We plan to investigate multiple imputation or a two-cohort analysis strategy (full FA subset vs.\ SFA/UFA-only subset) for the final report.
+
+  \item \textbf{Low predictive performance for classification:} The F1 score for high-SCC classification is currently low (0.28) despite a reasonable AUROC (0.71), likely due to class imbalance (77\% negative) and the limited FA features available. We will explore SMOTE-based oversampling, additional features (e.g., \texttt{iac}, \texttt{ec}), and gradient boosting (XGBoost) in the next phase.
+
+  \item \textbf{t-SNE / UMAP:} These dimensionality reduction methods are computationally intensive at this dataset scale. We plan to run them on a stratified subsample and will evaluate whether HTCondor is needed for the full-dataset run.
+\end{itemize}
+
+\end{document}
